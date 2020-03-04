@@ -20,13 +20,15 @@ public class AppUser {
 
     private Long chatId;
 
-    private Integer stateId;
+    private Integer stateId = 0;
 
     private String phone;
 
     private String firstName;
 
     private String lastName;
+
+    private String username;
 
     private String email;
 

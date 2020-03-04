@@ -2,8 +2,11 @@ package org.dental.backend.bot;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.dental.backend.domain.AppUser;
+import org.dental.backend.dto.AppUserCreateDTO;
+import org.dental.backend.dto.AppUserReadDTO;
+import org.dental.backend.service.AdminService;
 import org.dental.backend.service.AppUserService;
+import org.dental.backend.service.VisitService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.PropertySource;
@@ -11,13 +14,7 @@ import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
-import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
-import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardButton;
-import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
-
-import java.util.ArrayList;
-import java.util.List;
 
 @Component
 @PropertySource("classpath:telegram.properties")
@@ -25,6 +22,15 @@ public class ChatBot extends TelegramLongPollingBot {
 
     @Autowired
     private AppUserService appUserService;
+
+    @Autowired
+    private VisitService visitService;
+
+    @Autowired
+    private AdminService adminService;
+
+    @Autowired
+    private BotCommand botCommand;
 
     private static final Logger LOGGER = LogManager.getLogger(ChatBot.class);
 
@@ -65,25 +71,26 @@ public class ChatBot extends TelegramLongPollingBot {
 
         final String firstName = update.getMessage().getChat().getFirstName();
         final String lastName = update.getMessage().getChat().getLastName();
+        final String username = update.getMessage().getChat().getUserName();
 
-        AppUser user = appUserService.findByChatId(chatId);
+        AppUserReadDTO userDTO = appUserService.findByChatId(chatId);
 
-        BotContext context;
-        BotState state;
+        if (userDTO == null) {
+            AppUserCreateDTO createDTO = new AppUserCreateDTO();
+            createDTO.setChatId(chatId);
+            createDTO.setFirstName(firstName);
+            createDTO.setLastName(lastName);
+            createDTO.setUsername(username);
 
-        if (user == null) {
-            state = BotState.getInitialState();
-
-            user = appUserService.createUser(chatId, state, firstName, lastName);
-
-            context = BotContext.of(this, user, text);
-            state.enter(context);
+            userDTO = appUserService.createUser(createDTO);
 
             LOGGER.info("New user registered: " + chatId);
         }
-        if (user.getStateId() != 0) {
-            createVisit(user, text);
+        if (userDTO.getStateId() != 0) {
+            visitService.createVisit(this, userDTO, text);
         }
+
+        if (checkIfAdminCommand(chatId, text)) return;
 
         switch (text) {
             case "/start":
@@ -93,38 +100,31 @@ public class ChatBot extends TelegramLongPollingBot {
                 sendMessage(chatId, CONTACT_INFO);
                 break;
             case "Запись":
-                createVisit(user, text);
+                visitService.createVisit(this, userDTO, text);
                 break;
             default:
                 sendMessage(chatId, DEFAULT_MESSAGE);
         }
 
-        if (checkIfAdminCommand(chatId, text)) return;
+
     }
 
-    private void createVisit(AppUser user, String text) {
-        BotContext context;
-        BotState state;
+    public synchronized void sendMessage(Long chatId, String text) {
+        SendMessage message = new SendMessage();
+        message.enableMarkdown(true);
+        message.setChatId(chatId);
+        message.setText(text);
 
-        context = BotContext.of(this, user, text);
-        state = BotState.getStateById(user.getStateId());
-
-        LOGGER.info("Update received for user in state: " + state);
-
-        // handle input for personal user state
-        state.handleInput(context);
-
-        do {
-            state = state.nextState(); // got to next state
-            state.enter(context);      // enter to next state
-        } while (!state.isInputNeeded());
-
-        user.setStateId(state.ordinal());
-        appUserService.updateUser(user);
+        try {
+            botCommand.setButtons(message);
+            execute(message);
+        } catch (TelegramApiException e) {
+            e.printStackTrace();
+        }
     }
 
     private boolean checkIfAdminCommand(long chatId, String text) {
-        AppUser user = appUserService.findByChatId(chatId);
+        AppUserReadDTO user = appUserService.findByChatId(chatId);
 
         if (user == null || !user.getIsAdmin()) return false;
 
@@ -132,79 +132,18 @@ public class ChatBot extends TelegramLongPollingBot {
             LOGGER.info("Admin command received: " + BROADCAST);
 
             text = text.substring(BROADCAST.length());
-            broadcast(text);
+            adminService.broadcast(text);
 
             return true;
         } else if (text.equals(LIST_USERS)) {
             LOGGER.info("Admin command received: " + LIST_USERS);
 
-            getAllUsers(user);
+            adminService.getAllUsers(user);
             return true;
         }
 
         return false;
     }
 
-    private void getAllUsers(AppUser admin) {
-        StringBuilder sb = new StringBuilder("All user list: \r\n");
 
-        List<AppUser> users = appUserService.findAllUsers();
-
-        users.forEach(user ->
-                sb.append(user.getFirstName())
-                        .append(" ")
-                        .append(user.getLastName())
-                        .append(" | тел.")
-                        .append(user.getPhone())
-                        .append(" | ")
-                        .append(user.getEmail())
-                        .append(" | Статус: ")
-                        .append(user.getStateId())
-                        .append("\r\n")
-        );
-
-        sendMessage(admin.getChatId(), sb.toString());
-    }
-
-    private synchronized void sendMessage(long chatId, String text) {
-        SendMessage message = new SendMessage();
-        message.enableMarkdown(true);
-        message.setChatId(chatId);
-        message.setText(text);
-
-        try {
-            setButtons(message);
-            execute(message);
-        } catch (TelegramApiException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void broadcast(String text) {
-        List<AppUser> users = appUserService.findAllUsers();
-        users.forEach(user -> sendMessage(user.getChatId(), text));
-    }
-
-    public synchronized void setButtons(SendMessage sendMessage) {
-        // Create ReplyKeyboardMarkup object
-        ReplyKeyboardMarkup replyKeyboardMarkup = new ReplyKeyboardMarkup();
-        sendMessage.setReplyMarkup(replyKeyboardMarkup);
-        replyKeyboardMarkup.setSelective(true);
-        replyKeyboardMarkup.setResizeKeyboard(true);
-        replyKeyboardMarkup.setOneTimeKeyboard(false);
-
-        // Create the keyboard (list of keyboard rows)
-        List<KeyboardRow> keyboard = new ArrayList<>();
-
-        // Create a keyboard row
-        KeyboardRow keyboardFirstRow = new KeyboardRow();
-        // Set each button, you can also use KeyboardButton objects if you need something else than text
-        keyboardFirstRow.add(new KeyboardButton("Запись"));
-        keyboardFirstRow.add(new KeyboardButton("Контакты"));
-
-        // Add the first row to the keyboard
-        keyboard.add(keyboardFirstRow);
-        // Set the keyboard to the markup
-        replyKeyboardMarkup.setKeyboard(keyboard);
-    }
 }

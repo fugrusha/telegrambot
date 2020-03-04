@@ -1,6 +1,6 @@
 package org.dental.backend.mail;
 
-import org.dental.backend.domain.AppUser;
+import org.dental.backend.dto.AppUserReadDTO;
 import org.dental.backend.service.AppUserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,7 +33,7 @@ public class MailService {
     public void sendNotification() {
         // TODO
 
-        List<AppUser> users = appUserService.findAllUsers();
+        List<AppUserReadDTO> users = appUserService.getAllUsers();
         if (users.size() == 0) return;
 
         StringBuilder sb = new StringBuilder();

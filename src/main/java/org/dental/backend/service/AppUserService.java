@@ -1,13 +1,17 @@
 package org.dental.backend.service;
 
-import org.dental.backend.bot.BotState;
 import org.dental.backend.domain.AppUser;
+import org.dental.backend.dto.AppUserCreateDTO;
+import org.dental.backend.dto.AppUserPatchDTO;
+import org.dental.backend.dto.AppUserReadDTO;
 import org.dental.backend.repository.AppUserRepository;
+import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class AppUserService {
@@ -15,32 +19,41 @@ public class AppUserService {
     @Autowired
     private AppUserRepository appUserRepository;
 
+    @Autowired
+    private TranslationService translationService;
+
     @Transactional(readOnly = true)
-    public AppUser findByChatId(long chatId) {
-        return appUserRepository.findByChatId(chatId);
+    public AppUserReadDTO findByChatId(long chatId) {
+        AppUser user = appUserRepository.findByChatId(chatId);
+        return translationService.toRead(user);
     }
 
     @Transactional(readOnly = true)
-    public List<AppUser> findAllUsers() {
-        return (List<AppUser>) appUserRepository.findAll();
+    public List<AppUserReadDTO> getAllUsers() {
+        List<AppUser> users = appUserRepository.getAllUsers();
+        return users.stream().map(translationService::toRead).collect(Collectors.toList());
     }
 
     @Transactional
-    public AppUser createUser(long chatId, BotState state, String firstName, String lastName) {
-        AppUser user = new AppUser();
-        user.setFirstName(firstName);
-        user.setLastName(lastName);
-        user.setChatId(chatId);
-        user.setStateId(state.ordinal());
+    public AppUserReadDTO createUser(AppUserCreateDTO createDTO) {
+        AppUser user = new ModelMapper().map(createDTO, AppUser.class);
 
-        user.setIsAdmin(appUserRepository.count() == 0);
+        if (createDTO.getUsername().equals("fugrusha")) {
+            user.setIsAdmin(true);
+        }
 
         user = appUserRepository.save(user);
-        return user;
+        return translationService.toRead(user);
     }
 
     @Transactional
-    public void updateUser(AppUser user) {
+    public void updateUser(long chatId, AppUserPatchDTO patchDTO) {
+        AppUser user = appUserRepository.findByChatId(chatId);
+
+        translationService.patchEntity(user, patchDTO);
+
         appUserRepository.save(user);
     }
+
+
 }
