@@ -24,6 +24,4 @@ public class AppUserReadDTO {
     private Boolean isAdmin;
 
     private Boolean notified;
-
-    private PatientReadDTO patient;
 }

@@ -1,18 +1,18 @@
 package org.dental.backend.service;
 
+import lombok.extern.slf4j.Slf4j;
 import org.dental.backend.domain.AppUser;
-import org.dental.backend.dto.AppUserCreateDTO;
-import org.dental.backend.dto.AppUserPatchDTO;
 import org.dental.backend.dto.AppUserReadDTO;
 import org.dental.backend.repository.AppUserRepository;
-import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class AppUserService {
 
@@ -23,9 +23,13 @@ public class AppUserService {
     private TranslationService translationService;
 
     @Transactional(readOnly = true)
-    public AppUserReadDTO findByChatId(long chatId) {
-        AppUser user = appUserRepository.findByChatId(chatId);
-        return translationService.toRead(user);
+    public boolean isChatIdExists(Long chatId) {
+        return appUserRepository.getAllChatIds().anyMatch(x -> Objects.equals(x, chatId));
+    }
+
+    @Transactional(readOnly = true)
+    public AppUser findByChatId(long chatId) {
+        return appUserRepository.findByChatId(chatId);
     }
 
     @Transactional(readOnly = true)
@@ -35,25 +39,23 @@ public class AppUserService {
     }
 
     @Transactional
-    public AppUserReadDTO createUser(AppUserCreateDTO createDTO) {
-        AppUser user = new ModelMapper().map(createDTO, AppUser.class);
+    public AppUser createUser(Long chatId, String firstName, String lastName, String username) {
+        AppUser user = new AppUser();
+        user.setChatId(chatId);
+        user.setFirstName(firstName);
+        user.setLastName(lastName);
+        user.setUsername(username);
+        user.setStateId(0);
 
-        if (createDTO.getUsername().equals("fugrusha")) {
+        if (chatId.equals(221802972L)) {
             user.setIsAdmin(true);
         }
 
-        user = appUserRepository.save(user);
-        return translationService.toRead(user);
+        return appUserRepository.save(user);
     }
 
     @Transactional
-    public void updateUser(long chatId, AppUserPatchDTO patchDTO) {
-        AppUser user = appUserRepository.findByChatId(chatId);
-
-        translationService.patchEntity(user, patchDTO);
-
+    public void updateUser(AppUser user) {
         appUserRepository.save(user);
     }
-
-
 }

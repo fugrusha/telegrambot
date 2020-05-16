@@ -14,7 +14,7 @@ public interface AppUserRepository extends CrudRepository<AppUser, UUID> {
 
     AppUser findByChatId(Long id);
 
-    @Query("select u.id from AppUser u")
+    @Query("select u.chatId from AppUser u")
     Stream<Long> getAllChatIds();
 
     @Query("from AppUser")

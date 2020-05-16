@@ -1,41 +1,32 @@
 package org.dental.backend.bot;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.dental.backend.dto.AppUserCreateDTO;
-import org.dental.backend.dto.AppUserReadDTO;
+import lombok.extern.slf4j.Slf4j;
+import org.dental.backend.domain.AppUser;
 import org.dental.backend.service.AdminService;
 import org.dental.backend.service.AppUserService;
-import org.dental.backend.service.VisitService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.PropertySource;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
+import java.util.List;
+
+@Slf4j
 @Component
-@PropertySource("classpath:telegram.properties")
 public class ChatBot extends TelegramLongPollingBot {
 
     @Autowired
     private AppUserService appUserService;
 
     @Autowired
-    private VisitService visitService;
-
-    @Autowired
     private AdminService adminService;
 
     @Autowired
     private BotCommand botCommand;
-
-    private static final Logger LOGGER = LogManager.getLogger(ChatBot.class);
-
-    private static final String BROADCAST = "broadcast ";
-    private static final String LIST_USERS = "users";
 
     private final static String GREETING_MESSAGE = "Меня зовут Молочный Зуб, я буду твоим помощником.\r\n"
             + "Для общения со мной используйте какую-либо из команд ниже.";
@@ -64,86 +55,86 @@ public class ChatBot extends TelegramLongPollingBot {
 
     @Override
     public void onUpdateReceived(Update update) {
-        if (!update.hasMessage() || !update.getMessage().hasText()) return;
+        log.info("New message received");
 
-        final String text = update.getMessage().getText();
+        final Message message = update.getMessage();
         final long chatId = update.getMessage().getChatId();
 
         final String firstName = update.getMessage().getChat().getFirstName();
         final String lastName = update.getMessage().getChat().getLastName();
         final String username = update.getMessage().getChat().getUserName();
 
-        AppUserReadDTO userDTO = appUserService.findByChatId(chatId);
+        AppUser user = appUserService.findByChatId(chatId);
 
-        if (userDTO == null) {
-            AppUserCreateDTO createDTO = new AppUserCreateDTO();
-            createDTO.setChatId(chatId);
-            createDTO.setFirstName(firstName);
-            createDTO.setLastName(lastName);
-            createDTO.setUsername(username);
+        if (user == null) {
+            user = appUserService.createUser(chatId, firstName, lastName, username);
 
-            userDTO = appUserService.createUser(createDTO);
-
-            LOGGER.info("New user registered: " + chatId);
-        }
-        if (userDTO.getStateId() != 0) {
-            visitService.createVisit(this, userDTO, text);
+            log.info("New user was registered: " + chatId);
         }
 
-        if (checkIfAdminCommand(chatId, text)) return;
+        // when user sends contact number
+        if (message.hasContact()) {
+            updateBotContext(this, user, message);
+            return;
+        }
 
-        switch (text) {
+        if (adminService.checkIfAdminCommand(chatId, message.getText())) return;
+
+        switch (message.getText()) {
             case "/start":
-                sendMessage(chatId, "Привет, "+ firstName + " " + lastName+ "!\r\n" + GREETING_MESSAGE);
+                sendMessage(chatId, "Привет, " + firstName + "!\r\n" + GREETING_MESSAGE, null);
                 break;
-            case "Контакты":
-                sendMessage(chatId, CONTACT_INFO);
+            case BotCommand.CONTACT_BUTTON:
+                sendMessage(chatId, CONTACT_INFO, null);
                 break;
-            case "Запись":
-                visitService.createVisit(this, userDTO, text);
+            case BotCommand.VISIT_BUTTON:
+                updateBotContext(this, user, message);
+                break;
+            case "В главное меню":
+                user.setStateId(0);
+                appUserService.updateUser(user);
+                sendMessage(chatId, DEFAULT_MESSAGE, null);
                 break;
             default:
-                sendMessage(chatId, DEFAULT_MESSAGE);
+                if (user.getStateId() != 0) {
+                    updateBotContext(this, user, message);
+                    return;
+                }
+
+                sendMessage(chatId, DEFAULT_MESSAGE, null);
         }
-
-
     }
 
-    public synchronized void sendMessage(Long chatId, String text) {
+    public void updateBotContext(ChatBot bot, AppUser user, Message message) {
+        BotContext context = BotContext.of(bot, user, message);
+        BotState state = BotState.getStateById(user.getStateId());
+
+        log.info("Update received for user in state: " + state);
+
+        // handle input for personal user state
+        state.handleInput(context);
+
+        do {
+            state = state.nextState(); // got to next state
+            state.enter(context);      // enter to next state
+        } while (!state.isInputNeeded());
+
+        user.setStateId(state.ordinal());
+        appUserService.updateUser(user);
+    }
+
+    public void sendMessage(Long chatId, String text, List<String> buttonNames) {
         SendMessage message = new SendMessage();
         message.enableMarkdown(true);
         message.setChatId(chatId);
         message.setText(text);
 
         try {
-            botCommand.setButtons(message);
+            botCommand.setButtons(message, buttonNames);
             execute(message);
         } catch (TelegramApiException e) {
             e.printStackTrace();
+            log.error(e.getMessage());
         }
     }
-
-    private boolean checkIfAdminCommand(long chatId, String text) {
-        AppUserReadDTO user = appUserService.findByChatId(chatId);
-
-        if (user == null || !user.getIsAdmin()) return false;
-
-        if (text.startsWith(BROADCAST)) {
-            LOGGER.info("Admin command received: " + BROADCAST);
-
-            text = text.substring(BROADCAST.length());
-            adminService.broadcast(text);
-
-            return true;
-        } else if (text.equals(LIST_USERS)) {
-            LOGGER.info("Admin command received: " + LIST_USERS);
-
-            adminService.getAllUsers(user);
-            return true;
-        }
-
-        return false;
-    }
-
-
 }

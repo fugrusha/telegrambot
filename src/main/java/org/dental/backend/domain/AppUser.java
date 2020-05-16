@@ -6,7 +6,6 @@ import lombok.Setter;
 import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
 import javax.persistence.Id;
-import javax.persistence.OneToOne;
 import java.util.UUID;
 
 @Entity
@@ -20,7 +19,7 @@ public class AppUser {
 
     private Long chatId;
 
-    private Integer stateId = 0;
+    private Integer stateId;
 
     private String phone;
 
@@ -35,7 +34,4 @@ public class AppUser {
     private Boolean isAdmin;
 
     private Boolean notified = false;
-
-    @OneToOne
-    private Patient patient;
 }
