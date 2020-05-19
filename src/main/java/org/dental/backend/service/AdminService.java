@@ -31,7 +31,6 @@ public class AdminService {
             log.info("Admin command received: " + BROADCAST);
 
             if (isAdmin(chatId)) {
-                text = text.substring(BROADCAST.length());
                 broadcast(text);
             }
 
@@ -71,7 +70,8 @@ public class AdminService {
         chatBot.sendMessage(adminChatId, sb.toString(), null);
     }
 
-    private void broadcast(String text) {
+    private void broadcast(String broadcastText) {
+        String text = broadcastText.substring(BROADCAST.length());
         appUserRepository.getAllChatIds().forEach(id -> chatBot.sendMessage(id, text, null));
     }
 

@@ -49,7 +49,7 @@ public class AppUserRepositoryTest {
         Set<Long> expectedResult = new HashSet<>();
 
         for (int i = 0; i < 50; i++) {
-            expectedResult.add(testObjectFactory.createUserWithRandomChatId().getChatId());
+            expectedResult.add(testObjectFactory.createUserWithRandomChatId(false).getChatId());
         }
 
         Set<Long> actualResult = appUserRepository.getAllChatIds().collect(Collectors.toSet());
@@ -71,5 +71,4 @@ public class AppUserRepositoryTest {
         Assertions.assertThat(actualResult).extracting("chatId")
                 .containsExactlyInAnyOrder(user1ChatId, user2ChatId, user3ChatId);
     }
-
 }

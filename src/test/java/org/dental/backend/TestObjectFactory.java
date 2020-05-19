@@ -18,18 +18,24 @@ public class TestObjectFactory {
         user.setUsername("username");
         user.setLastName("lastName");
         user.setFirstName("firstName");
+        user.setIsAdmin(false);
         user.setChatId(chatId);
         user.setStateId(stateId);
         return appUserRepository.save(user);
     }
 
-    public AppUser createUserWithRandomChatId() {
+    public AppUser createUserWithRandomChatId(boolean isAdmin) {
         AppUser user = new AppUser();
         user.setUsername("username");
         user.setLastName("lastName");
         user.setFirstName("firstName");
         user.setChatId(new Random().nextLong());
         user.setStateId(new Random().nextInt(3));
+        if (isAdmin) {
+            user.setIsAdmin(true);
+        } else {
+            user.setIsAdmin(false);
+        }
         return appUserRepository.save(user);
     }
 }

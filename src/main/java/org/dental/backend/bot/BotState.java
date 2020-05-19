@@ -36,7 +36,7 @@ public enum BotState {
             sendMessage(context,
                     "Чтобы мы могли с вами связаться поделитесь вашим контактым телефоном.\n"
                     + "Нажмите отправить номер или введите ваш телефон в формате 0xx-xxx-xx-xx: ",
-                    List.of(BotCommand.HOME_BUTTON, BotCommand.PHONE));
+                    List.of(KeyboardFactory.HOME_BUTTON, KeyboardFactory.PHONE));
         }
 
         @Override
@@ -58,7 +58,7 @@ public enum BotState {
                 } else {
                     sendMessage(context,
                             "Телефон введен с ошибками, попробуйте еще раз.",
-                            List.of(BotCommand.HOME_BUTTON));
+                            List.of(KeyboardFactory.HOME_BUTTON));
 
                     log.info("Phone number is not valid");
                     next = ENTER_PHONE;
@@ -78,7 +78,7 @@ public enum BotState {
         @Override
         public void enter(BotContext context) {
             sendMessage(context, "Для записи Вам необходимо указать вашу электронную почту: ",
-                    List.of(BotCommand.HOME_BUTTON));
+                    List.of(KeyboardFactory.HOME_BUTTON));
         }
 
         @Override
@@ -93,7 +93,7 @@ public enum BotState {
             } else {
                 sendMessage(context,
                         "Электронная почта введена с ошибками, попробуйте еще раз.",
-                        List.of(BotCommand.HOME_BUTTON));
+                        List.of(KeyboardFactory.HOME_BUTTON));
 
                 log.info("Email is not valid");
                 next = ENTER_EMAIL;
@@ -111,7 +111,7 @@ public enum BotState {
         public void enter(BotContext context) {
             sendMessage(context,
                     "Ваша заявка принята! В ближайшее время с ваши свяжется наш администратор.",
-                    List.of(BotCommand.HOME_BUTTON));
+                    List.of(KeyboardFactory.HOME_BUTTON));
         }
 
         @Override
@@ -183,9 +183,11 @@ public enum BotState {
         KeyboardRow keyboardFirstRow = new KeyboardRow();
         // Set each button, you can also use KeyboardButton objects if you need something else than text
         for (String buttonName : buttonNames) {
-            if (buttonName.equals(BotCommand.PHONE)) {
-                KeyboardButton contactButton = new KeyboardButton(buttonName);
-                contactButton.setRequestContact(true);
+            if (buttonName.equals(KeyboardFactory.PHONE)) {
+                KeyboardButton contactButton = new KeyboardButton()
+                        .setText(KeyboardFactory.PHONE_EMOJI)
+                        .setRequestContact(true);
+
                 keyboardFirstRow.add(contactButton);
             } else {
                 keyboardFirstRow.add(new KeyboardButton(buttonName));
